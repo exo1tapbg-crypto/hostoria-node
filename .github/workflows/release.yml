@@ -1,0 +1,41 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build binaries and create GitHub release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build amd64
+        run: make build-linux-amd64
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Build arm64
+        run: make build-linux-arm64
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/hostoria-node-linux-amd64
+            build/hostoria-node-linux-arm64
+          generate_release_notes: true
