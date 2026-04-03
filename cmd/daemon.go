@@ -102,6 +102,11 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
+// heartbeatState tracks the last known health of the panel connection.
+// It is written only from the heartbeat goroutine so no mutex is needed.
+var heartbeatHealthy = false
+var heartbeatInitialized = false
+
 func runHeartbeat(cfg *config.Config, panelClient *client.PanelClient) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -118,11 +123,39 @@ func sendHeartbeat(cfg *config.Config, panelClient *client.PanelClient) {
 	stats, err := system.Gather(cfg.System.Data)
 	if err != nil {
 		fmt.Printf("[hostoria] Warning: failed to gather stats for heartbeat: %v\n", err)
+		printHealth(false)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := panelClient.Heartbeat(ctx, stats); err != nil {
 		fmt.Printf("[hostoria] Warning: heartbeat failed: %v\n", err)
+		printHealth(false)
+		return
+	}
+	printHealth(true)
+}
+
+// printHealth prints a green heart when healthy or a red broken heart when not,
+// but only when the status changes (or on the very first beat).
+func printHealth(healthy bool) {
+	if heartbeatInitialized && heartbeatHealthy == healthy {
+		return // no change — don't spam the log
+	}
+	prev := heartbeatHealthy
+	heartbeatHealthy = healthy
+	heartbeatInitialized = true
+
+	if healthy {
+		// Green heart ♥ — ANSI 32 (green)
+		fmt.Print("\033[32m[hostoria] \u2665  Node is healthy — panel connection established\033[0m\n")
+	} else {
+		// Red broken heart 💔 — ANSI 31 (red)
+		if prev {
+			// was healthy, just became unhealthy
+			fmt.Print("\033[31m[hostoria] \U0001F494  Node is UNHEALTHY — lost connection to panel\033[0m\n")
+		} else {
+			fmt.Print("\033[31m[hostoria] \U0001F494  Node is UNHEALTHY — cannot reach panel\033[0m\n")
+		}
 	}
 }
