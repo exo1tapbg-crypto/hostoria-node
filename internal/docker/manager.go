@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -44,7 +45,7 @@ func (m *Manager) Close() error { return m.cli.Close() }
 
 // PullImage pulls image if not available locally, streaming progress to outputFn.
 func (m *Manager) PullImage(ctx context.Context, img string, outputFn func(string)) error {
-	out, err := m.cli.ImagePull(ctx, img, types.ImagePullOptions{})
+	out, err := m.cli.ImagePull(ctx, img, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("pulling image %q: %w", img, err)
 	}
@@ -131,7 +132,7 @@ func (m *Manager) CreateContainer(ctx context.Context, srv *server.Server, dataD
 
 // StartContainer starts an already-created container.
 func (m *Manager) StartContainer(ctx context.Context, containerID string) error {
-	return m.cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
+	return m.cli.ContainerStart(ctx, containerID, container.StartOptions{})
 }
 
 // StopContainer sends SIGTERM and waits up to 30 s before returning.
@@ -147,7 +148,7 @@ func (m *Manager) KillContainer(ctx context.Context, containerID string) error {
 
 // RemoveContainer force-removes a container.
 func (m *Manager) RemoveContainer(ctx context.Context, containerID string) error {
-	return m.cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+	return m.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 
 // IsRunning reports whether containerID is in the running state.
@@ -165,7 +166,7 @@ func (m *Manager) IsRunning(ctx context.Context, containerID string) (bool, erro
 // GetContainerID finds the Docker container ID for a Hostoria server UUID.
 // Returns ("", nil) when no container exists for that UUID.
 func (m *Manager) GetContainerID(ctx context.Context, serverUUID string) (string, error) {
-	list, err := m.cli.ContainerList(ctx, types.ContainerListOptions{
+	list, err := m.cli.ContainerList(ctx, container.ListOptions{
 		All:     true,
 		Filters: filters.NewArgs(filters.Arg("label", labelUUID+"="+serverUUID)),
 	})
@@ -221,7 +222,7 @@ func (m *Manager) GetStats(ctx context.Context, containerID string) (*server.Res
 // Attach attaches to container stdout/stderr, calling outputFn for each line,
 // and writing commands received on stdinCh to the container's stdin.
 func (m *Manager) Attach(ctx context.Context, containerID string, outputFn func(string), stdinCh <-chan string) error {
-	resp, err := m.cli.ContainerAttach(ctx, containerID, types.ContainerAttachOptions{
+	resp, err := m.cli.ContainerAttach(ctx, containerID, container.AttachOptions{
 		Stream: true, Stdin: true, Stdout: true, Stderr: true, Logs: false,
 	})
 	if err != nil {
@@ -304,7 +305,7 @@ func (m *Manager) RunInstallScript(ctx context.Context, srv *server.Server, data
 	}
 
 	// Stream logs
-	logOut, err := m.cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{
+	logOut, err := m.cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{
 		ShowStdout: true, ShowStderr: true, Follow: true,
 	})
 	if err == nil {
@@ -362,7 +363,7 @@ func (m *Manager) WatchContainer(ctx context.Context, containerID string, exitFn
 // RestoreContainerMap returns a map of serverUUID → containerID for all
 // Hostoria-managed containers that Docker currently knows about.
 func (m *Manager) RestoreContainerMap(ctx context.Context) (map[string]string, error) {
-	list, err := m.cli.ContainerList(ctx, types.ContainerListOptions{
+	list, err := m.cli.ContainerList(ctx, container.ListOptions{
 		All:     true,
 		Filters: filters.NewArgs(filters.Arg("label", labelManaged+"=true")),
 	})
@@ -380,7 +381,7 @@ func (m *Manager) RestoreContainerMap(ctx context.Context) (map[string]string, e
 
 // StreamLogs attaches to container log output (past + future) and calls outputFn for each line.
 func (m *Manager) StreamLogs(ctx context.Context, containerID string, outputFn func(string)) error {
-	out, err := m.cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{
+	out, err := m.cli.ContainerLogs(ctx, containerID, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
