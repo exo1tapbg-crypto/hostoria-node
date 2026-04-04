@@ -19,6 +19,20 @@ func NodeAuth(next http.Handler) http.Handler {
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
+			// Browser WebSocket clients cannot reliably set custom Authorization
+			// headers, so allow token via query param as a fallback.
+			queryToken := strings.TrimSpace(r.URL.Query().Get("token"))
+			if queryToken != "" {
+				if queryToken != cfg.Token {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					w.Write([]byte(`{"error":"invalid token"}`))
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"missing Authorization header"}`))
